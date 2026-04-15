@@ -55,7 +55,32 @@ REWRITES = [
     # --- Cargo build (not test/run): quiet mode ---
     (r'^cargo build\b(?!.*--quiet)(?!.*\|)',
      lambda m, c: c[:m.end()] + ' --quiet' + c[m.end():]),
+
+    # --- General output limiters: catch anything not already piped ---
+    (r'^find\b(?!.*\|)(?!.*-maxdepth\s+[01])',
+     lambda m, c: c + ' 2>/dev/null | head -50'),
+
+    (r'^ps\b(?!.*\|)',
+     lambda m, c: c + ' | head -30'),
+
+    (r'^env\b(?!.*\|)',
+     lambda m, c: c + ' | head -50'),
+
+    (r'^printenv\b(?!.*\|)',
+     lambda m, c: c + ' | head -50'),
 ]
+
+
+# Commands that already self-limit or where head would break semantics
+NEVER_LIMIT = [
+    'git diff', 'git show', 'git stash show',
+    'cat ', 'head ', 'tail ', 'grep ', 'rg ',
+    'wc ', 'curl ', 'wget ',
+]
+
+
+def already_piped(cmd: str) -> bool:
+    return '|' in cmd or any(cmd.lstrip().startswith(p) for p in NEVER_LIMIT)
 
 
 def rewrite_command(cmd: str) -> str:
