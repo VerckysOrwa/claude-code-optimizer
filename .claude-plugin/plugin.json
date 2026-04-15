@@ -11,6 +11,5 @@
   "license": "MIT",
   "keywords": ["tokens", "efficiency", "hooks", "rate-limits", "productivity"],
   "hooks": "./hooks/hooks.json",
-  "commands": ["./commands/"],
-  "rules": ["./rules/"]
+  "commands": ["./commands/"]
 }
