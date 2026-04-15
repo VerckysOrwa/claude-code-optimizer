@@ -1,139 +1,66 @@
 # token-saver-claude
 
-Reduces token consumption in Claude Code sessions — especially for coding tasks.
-Prevents hitting rate limits by intercepting noisy commands before they run,
-truncating large outputs, and enforcing concise response behavior via global rules.
+A Claude Code plugin that reduces token consumption — especially for coding tasks.
+Stops rate limits from hitting faster than expected by intercepting noisy commands
+before they run, truncating large outputs, and enforcing concise response behavior.
+
+---
+
+## Install
+
+**Step 1 — Add the marketplace:**
+
+```
+/plugin marketplace add https://github.com/VerckysOrwa/claude-code-optimizer
+```
+
+**Step 2 — Install the plugin:**
+
+```
+/plugin install token-saver-claude@token-saver-claude
+```
+
+**Step 3 — Reload:**
+
+```
+/reload-plugins
+```
+
+Done. The hooks and rules are now active for every session.
 
 ---
 
 ## How It Works
 
 ```
-User prompt
-     │
-     ▼
-[PreToolUse hook]      ← rewrites commands before execution
-     │                   npm install → npm install --loglevel=error
-     │                   git log    → git log --oneline -25
-     ▼
-  Tool executes
-     │
-     ▼
-[PostToolUse hook]     ← truncates if output still exceeds 80/100 lines
-     │                   failed commands show tail (errors at bottom)
-     ▼
-[CLAUDE.md rules]      ← instructs Claude: no preambles, diffs only, grep first
-     │
-     ▼
-  Claude responds
+You type a prompt
+       │
+       ▼
+ [PreToolUse hook]      rewrites commands before they execute
+       │                npm install → npm install --loglevel=error
+       │                git log     → git log --oneline -25
+       ▼
+   Tool runs
+       │
+       ▼
+ [PostToolUse hook]     truncates output if still too large
+       │                failed commands → shows tail (errors at bottom)
+       │                passing commands → shows head
+       ▼
+ [Efficiency rules]     Claude responds without preambles,
+                        uses diffs only, searches before reading
 ```
 
 ---
 
-## Installation
+## What Gets Applied
 
-### Option 1 — Inside Claude Code (recommended)
+### Command rewriting (PreToolUse)
 
-Open a Claude Code session and paste this message:
+Intercepts `Bash` calls and rewrites them before execution.
+Large output is **never generated**, so it never enters the context window.
 
-```
-Clone https://github.com/verckys/token-saver-claude into ~/token-saver-claude,
-then run bash ~/token-saver-claude/install.sh
-```
-
-Claude Code will handle the clone and run the installer for you.
-After it finishes, restart Claude Code and run `/doctor` to confirm hooks loaded.
-
----
-
-### Option 2 — One-liner in your terminal
-
-```bash
-git clone https://github.com/verckys/token-saver-claude ~/token-saver-claude \
-  && bash ~/token-saver-claude/install.sh
-```
-
----
-
-### Option 3 — Manual
-
-```bash
-# 1. Clone
-git clone https://github.com/verckys/token-saver-claude ~/token-saver-claude
-
-# 2. Copy hooks
-mkdir -p ~/.claude/hooks
-cp ~/token-saver-claude/hooks/pre_tool_use.py   ~/.claude/hooks/
-cp ~/token-saver-claude/hooks/truncate_output.py ~/.claude/hooks/
-chmod +x ~/.claude/hooks/pre_tool_use.py ~/.claude/hooks/truncate_output.py
-
-# 3. Global behavior rules
-cp ~/token-saver-claude/CLAUDE.md.template ~/.claude/CLAUDE.md
-# (skip if you already have a CLAUDE.md — merge manually)
-
-# 4. Register hooks in settings
-# If ~/.claude/settings.json is empty, replace with:
-cat > ~/.claude/settings.json << 'EOF'
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/pre_tool_use.py" }]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/truncate_output.py" }]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "python3 ~/.claude/hooks/truncate_output.py" }]
-      }
-    ]
-  }
-}
-EOF
-# (if settings.json already has content, merge the "hooks" block manually)
-
-# 5. Verify
-# Restart Claude Code, then run:
-#   /doctor
-```
-
----
-
-## What Gets Installed
-
-```
-~/.claude/
-├── CLAUDE.md                    ← global conciseness rules
-├── hooks/
-│   ├── pre_tool_use.py          ← PreToolUse hook: rewrites noisy commands
-│   └── truncate_output.py       ← PostToolUse hook: truncates large outputs
-```
-
----
-
-## Components
-
-### `CLAUDE.md` — Response behavior rules
-
-Loaded automatically every session. Tells Claude to:
-- Skip preambles and summaries — answer directly
-- Use `Edit` (diffs only) for code changes, never rewrite whole files
-- `Grep`/`Glob` before reading files; use `offset`+`limit` on large files
-- Never re-read files already seen this session
-- Never open `node_modules/`, `dist/`, `.git/`, lock files, or build artifacts
-- Run `/compact` at 30 turns, `/clear` between unrelated tasks
-
-### `hooks/pre_tool_use.py` — Command rewriting
-
-Intercepts `Bash` tool calls before execution and rewrites them to suppress verbose output.
-The large output is **never generated**, so it never enters the context window at all.
-
-| Command | Rewritten to |
+| You write | What runs |
 |---|---|
 | `npm install` | `npm install --loglevel=error` |
 | `pip install X` | `pip install -q X` |
@@ -148,84 +75,58 @@ The large output is **never generated**, so it never enters the context window a
 Rules are idempotent — commands that already have the relevant flag pass through unchanged.
 `git diff`, `git show`, `git stash show` are never modified.
 
-### `hooks/truncate_output.py` — Output truncation
-
-If a command still produces large output after rewriting, this hook truncates it.
+### Output truncation (PostToolUse)
 
 | Tool | Limit | Strategy |
 |---|---|---|
-| `Bash` | 80 lines | Failed command → show **tail** (errors at bottom). Passing → show **head**. |
-| `Read` | 100 lines | Show **head** with count of hidden lines. |
+| Bash | 80 lines | Failed → tail · Passing → head |
+| Read | 100 lines | Head with hidden line count |
 
-### `token_stats.py` — Diagnostics
+### Efficiency rules
 
-Reads your local Claude Code session history and reports token estimates per session.
+Applied every session via the plugin's rules file:
 
-```bash
-python3 ~/token-saver-claude/token_stats.py
-python3 ~/token-saver-claude/token_stats.py --sessions 10
+- No preambles or summaries — answer directly
+- Code changes via `Edit` tool only (diffs, not full rewrites)
+- `Grep`/`Glob` before reading files
+- Never re-read files already in context
+- Never open `node_modules/`, `dist/`, `.git/`, lock files, build artifacts
+- `/compact` at 30 turns · `/clear` between unrelated tasks
+
+---
+
+## Commands
+
+### `/token-stats`
+
+Shows token estimates from your recent sessions — how many turns, which tools were called most, and what produced the largest outputs.
+
+```
+/token-stats
 ```
 
 ---
 
-## Usage Tips
+## Tips
 
-| Habit | Why it helps |
+| Habit | Why |
 |---|---|
 | `/compact` every ~30 turns | Compresses history in-place |
 | `/clear` between unrelated tasks | Resets context to zero |
-| Name the exact file and line you want changed | Skips the exploration phase |
-| Ask for diffs, not full file rewrites | Cuts output tokens 10–20x |
-
----
-
-## Customization
-
-**Change truncation limits** — edit `~/.claude/hooks/truncate_output.py`:
-```python
-MAX_LINES = {
-    "Bash": 80,   # raise if you're losing important output
-    "Read": 100,
-}
-```
-
-**Disable a command rewrite** — edit `~/.claude/hooks/pre_tool_use.py` and remove the relevant tuple from `REWRITES`.
-
-**Add a new rewrite rule:**
-```python
-# Example: suppress a custom build tool
-(r'\bmytool\b(?!.*--quiet)',
- lambda m, c: c[:m.end()] + ' --quiet' + c[m.end():]),
-```
+| Name the exact file:line you want changed | Skips the exploration phase |
+| Ask for diffs, not full rewrites | Cuts output 10–20x |
 
 ---
 
 ## Uninstall
 
-```bash
-rm ~/.claude/hooks/pre_tool_use.py
-rm ~/.claude/hooks/truncate_output.py
-rm ~/.claude/CLAUDE.md   # or edit to remove the token-saver rules
-
-# Edit ~/.claude/settings.json and remove the "hooks" block
 ```
-
----
-
-## Troubleshooting
-
-**Hooks not loading** — run `/doctor` inside Claude Code. Make sure the paths in `settings.json` use your actual home directory.
-
-**A command was rewritten but shouldn't be** — open `~/.claude/hooks/pre_tool_use.py` and remove or guard the relevant rule in `REWRITES`.
-
-**Truncation is cutting off errors** — the hook already shows the tail for failed commands. If you still lose output, increase `MAX_LINES["Bash"]` in `truncate_output.py`.
-
-**Token stats show no data** — the history file (`~/.claude/history.jsonl`) must exist. Complete at least one full Claude Code session first.
+/plugin uninstall token-saver-claude@token-saver-claude
+```
 
 ---
 
 ## Requirements
 
-- Claude Code (any recent version)
+- Claude Code (recent version with `/plugin` support)
 - Python 3.8+
-- Git

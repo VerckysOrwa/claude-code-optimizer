@@ -1,0 +1,29 @@
+{
+  "name": "token-saver-claude",
+  "owner": {
+    "name": "VerckysOrwa",
+    "email": "vrcxabayo@gmail.com"
+  },
+  "metadata": {
+    "description": "Reduces token consumption in Claude Code by intercepting noisy commands before they run, truncating large outputs, and enforcing concise response behavior."
+  },
+  "plugins": [
+    {
+      "name": "token-saver-claude",
+      "source": "./",
+      "description": "Cuts Claude Code token usage on coding tasks. Hooks rewrite package manager installs, git log, and build commands to suppress verbose output before it enters the context window. Truncation catches anything that slips through. Global rules keep responses short.",
+      "version": "1.0.0",
+      "author": {
+        "name": "VerckysOrwa",
+        "email": "vrcxabayo@gmail.com"
+      },
+      "homepage": "https://github.com/VerckysOrwa/claude-code-optimizer",
+      "repository": "https://github.com/VerckysOrwa/claude-code-optimizer",
+      "license": "MIT",
+      "keywords": ["tokens", "efficiency", "hooks", "rate-limits", "productivity"],
+      "category": "workflow",
+      "tags": ["hooks", "tokens", "efficiency"],
+      "strict": false
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'HOOK=$(find ~/.claude/plugins -name pre_tool_use.py -path \"*token-saver-claude*\" 2>/dev/null | head -1); [ -n \"$HOOK\" ] && python3 \"$HOOK\" || true'",
+            "description": "Rewrites noisy Bash commands before execution to suppress verbose output"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'HOOK=$(find ~/.claude/plugins -name truncate_output.py -path \"*token-saver-claude*\" 2>/dev/null | head -1); [ -n \"$HOOK\" ] && python3 \"$HOOK\" || true'",
+            "description": "Truncates large Bash output — failed commands show tail, passing show head"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'HOOK=$(find ~/.claude/plugins -name truncate_output.py -path \"*token-saver-claude*\" 2>/dev/null | head -1); [ -n \"$HOOK\" ] && python3 \"$HOOK\" || true'",
+            "description": "Truncates large file reads to 100 lines"
+          }
+        ]
+      }
+    ]
+  }
+}
